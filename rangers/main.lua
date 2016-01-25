@@ -1,5 +1,5 @@
 -- $Name:Космические рейнджеры$
--- $Version:1.8$
+-- $Version:1.8.1$
 
 instead_version "1.4.4"
 require "xact"
