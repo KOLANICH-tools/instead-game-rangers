@@ -144,8 +144,8 @@ function dump(fname)
 		if v.is_active then
 			print("p"..tostring(k).." = param {");
 			print("\tnam = "..string.format("%q", tostring(v.name))..";");
-			print("\tmin = "..tostring(v.range_start)..";");
-			print("\tmax = "..tostring(v.range_stop)..";");
+			print("\tmin = "..tostring(v.range.start)..";");
+			print("\tmax = "..tostring(v.range.stop)..";");
 			print("\tstart = "..tostring(v.start_value)..";");
 			if v.fail or v.death  then
 				print("\tfailed = true;");
@@ -156,7 +156,7 @@ function dump(fname)
 			if v.show_at_zero then
 				print("\tshowIfZero = true;");
 			end
-			if v.critical_boundary then
+			if v.type.value ~= 0 and v.critical_boundary then
 				print("\tcritical = '"..v.critical_boundary.."';");
 				if not v.critical_message then -- BUG???
 					v.critical_message = '';
@@ -168,34 +168,34 @@ function dump(fname)
 				local kk,vv
 				for kk,vv in ipairs(v.grades) do
 					if vv.label then
-						print("\t\t{ from = "..tostring(vv.range_start).."; to = "..tostring(vv.range_stop).."; title = "..string.format("%q", vv.label).." };");
+						print("\t\t{ from = "..tostring(vv.range.start).."; to = "..tostring(vv.range.stop).."; title = "..string.format("%q", vv.label).." };");
 					end
 				end
 				print("\t};");
 			end
 			print("}");
---			print(v.range_start, v.range_stop, v.name, v.description);
+--			print(v.range.start, v.range.stop, v.name, v.description);
 		end
 	end
 	for k,v in pairs(quest.locations) do
 		print("l"..k.." = loc {");
 		local kk,vv
-		if v.is_initial then
+		if v.type.is_initial then
 			print("\tstart = true;");
 		end
-		if v.is_success then
+		if v.type.is_success then
 			print("\tsuccess = true;");
 		end
-		if v.is_fail then
+		if v.type.is_fail then
 			print("\tfailed = true;");
 		end
-		if v.is_empty then
+		if v.type.is_empty then
 			print("\tempty = true;");
 		end
-		if v.passes_days then
-			print("\tday = true;");
+		if v.passes_days > 0 then
+			print("\tday = " .. v.passes_days .. ";");
 		end
-		if v.text_selection_method and #v.descriptions > 0 then
+		if v.text_selection_method.value ~= 0 and #v.descriptions > 0 then
 			local c
 			if not v.text_selection_formula then
 				c = "randomdesc("..tostring(#v.descriptions)..")";
@@ -206,20 +206,22 @@ function dump(fname)
 		end
 		for kk,vv in ipairs(v.descriptions) do
 			local n = "desc";
-			if kk > 1 then
-				n = n..tostring(kk)
+			if vv.msg then
+				if kk > 1 then
+					n = n..tostring(kk)
+				end
+				print("\t"..n.." = "..string.format("%q", vv.msg)..";");
 			end
-			print("\t"..n.." = "..string.format("%q", vv)..";");
 		end
 		if #v.actions > 0 then
 			local t = ""
 			for kk,vv in ipairs(v.actions) do
-				if vv.show_ ~= 0 then
-					t = t.."p"..tostring(vv.idx)..":visible("..tostring(vv.show_ == 1).."); "
+				if vv.show_.value ~= 0 then
+					t = t.."p"..tostring(vv.luaIdx)..":visible("..tostring(vv.show_.value == 1).."); "
 				end
 				if vv.expr_present then
 --					t = t..parse_expr(vv.expr);
-					t = t.."p"..tostring(vv.idx)..":equal("..parse_expr(vv.expr)..");";
+					t = t.."p"..tostring(vv.luaIdx)..":equal("..parse_expr(vv.expr)..");";
 				else
 					local c = "units";
 					if vv.percent_present then
@@ -228,7 +230,7 @@ function dump(fname)
 						c = "equal"
 					end
 					if vv.delta ~= 0 or vv.delta_present then
-						t = t.."p"..tostring(vv.idx)..":"..c.."("..tostring(vv.delta)..");";
+						t = t.."p"..tostring(vv.luaIdx)..":"..c.."("..tostring(vv.delta)..");";
 					end
 				end
 			end
@@ -247,8 +249,8 @@ function dump(fname)
 				if vv.limit ~= 0 then
 					t = t.."\t\t\tcount = "..tostring(vv.limit)..",\n";
 				end
-				if vv.passes_days then
-					t = t.."\t\t\tday = true,\n";
+				if vv.passes_days > 0 then
+					t = t.."\t\t\tday = " .. vv.passes_days .. ",\n";
 				end
 				if vv.always_show then
 					t = t.."\t\t\talwaysShow = true,\n";
@@ -267,52 +269,52 @@ function dump(fname)
 				if #vv.actions > 0 then
 					local code = "";
 					for kkk,vvv in ipairs(vv.actions) do
-						local pname = "p"..tostring(vvv.idx)
+						local pname = "p"..tostring(vvv.luaIdx)
 						if vvv.threshold_message then
 							code = code..pname..":customDesc("..string.format("%q",vvv.threshold_message)..");";
 						end
-						if vvv.show_ ~= 0 then
-							code = code..pname..":visible("..tostring(vvv.show_ == 1)..");";
+						if vvv.show_.value ~= 0 then
+							code = code..pname..":visible("..tostring(vvv.show_.value == 1)..");";
 						end
-						if vvv.range_start > quest.parameters[vvv.idx].range_start or
-							vvv.range_stop < quest.parameters[vvv.idx].range_stop then
+						if vvv.range.start > vvv.param.range.start or
+							vvv.range.stop < vvv.param.range.stop then
 							if parcond ~= '' then
 								parcond = parcond.." and ";
 							end
-							parcond = parcond..pname..":range("..tostring(vvv.range_start)..", "..tostring(vvv.range_stop)..")";
+							parcond = parcond..pname..":range("..tostring(vvv.range.start)..", "..tostring(vvv.range.stop)..")";
 						end
-						if #vvv.includes_values > 0 then
+						if #vvv.includes.values > 0 then
 							if parcond ~= '' then
 								parcond = parcond.." and ";
 							end
-							if vvv.includes_accept then
+							if vvv.includes.accept then
 								parcond = parcond..pname..":inval(";
 							else
 								parcond = parcond.."not "..pname..":inval(";
 							end
 							local z,x
-							for z,x in ipairs(vvv.includes_values) do
+							for z,x in ipairs(vvv.includes.values) do
 								parcond = parcond..tostring(x)
-								if z ~= #vvv.includes_values then
+								if z ~= #vvv.includes.values then
 									parcond = parcond..", "
 								end
 							end
 							parcond = parcond..")";
 						end
 
-						if #vvv.mods_values > 0 then
+						if #vvv.mods.values > 0 then
 							if parcond ~= '' then
 								parcond = parcond.." and ";
 							end
-							if vvv.mods_type then
+							if vvv.mods.type then
 								parcond = parcond..pname..":mod0(";
 							else
 								parcond = parcond.."not "..pname..":mod0(";
 							end
 							local z,x
-							for z,x in ipairs(vvv.mods_values) do
+							for z,x in ipairs(vvv.mods.values) do
 								parcond = parcond..tostring(x)
-								if z ~= #vvv.mods_values then
+								if z ~= #vvv.mods.values then
 									parcond = parcond..", "
 								end
 							end
@@ -403,29 +405,30 @@ function convert(fname, out)
 	quest.difficulty = read4(f)
 	for p = 1, parameter_count do
 		local par = {}
-		par.range_start = read4(f)
-		par.range_stop = read4(f)
+		par.range = {
+			start = read4(f),
+			stop = read4(f)
+		}
 		local mid = read4(f)
-		par.type = read1(f)
-		if par.type == 1 then 
+		par.type = {value = read1(f)}
+		if par.type.value == 1 then 
 			par.fail = true
-		elseif par.type == 2 then
+		elseif par.type.value == 2 then
 			par.success = true
-		elseif par.type == 3 then
+		elseif par.type.value == 3 then
 			par.death = true
 		end
 		read4(f)
 		par.show_at_zero = (read1(f) == 1)
 
-		if par.type ~= 0 then
-			if (read1(f) == 1) then
-				par.critical_boundary = "min" 
-			else
-				par.critical_boundary = "max" 
-			end
+		cb = {value = read1(f)}
+		if (cb.value == 1) then
+			cb.label = "min" 
 		else
-			read1(f)
+			cb.label = "max" 
 		end
+		par.critical_boundary = cb
+		par.critical_boundary = par.critical_boundary.label
 		par.is_active = (read1(f) == 1)
 		local ranges = read1(f)
 		skip(f, 3)
@@ -434,11 +437,13 @@ function convert(fname, out)
 		par.name = readu16(f)
 		par.grades = {}
 		for n=1, ranges do
-			local range_start = read4(f)
-			local range_stop = read4(f)
+			local range = {
+				start = read4(f),
+				stop = read4(f)
+			};
 			read4(f)
 			local label = readu16(f)
-			table.insert(par.grades, {range_start = range_start, range_stop = range_stop, label = label })
+			table.insert(par.grades, {range = range, label = label })
 		end
 		read4(f)
 		par.critical_message = readu16(f)
@@ -492,26 +497,30 @@ function convert(fname, out)
 	skip(f, 8)
 	for i=1, loc_count do
 		local location = {}
-		location.passes_days = (read4(f) == 1)
+		location.passes_days = read4(f)
 		read4(f)
 		read4(f)
 		location.id = read4(f)
-		location.is_initial = (read1(f) == 1)
-		location.is_success = (read1(f) == 1)
-		location.is_fail = (read1(f) == 1)
+		location.type = {
+			is_initial = (read1(f) == 1),
+			is_success = (read1(f) == 1),
+			is_fail = (read1(f) == 1)
+		}
 		local is_death = (read1(f) == 1)
 		if location.is_death then
-			location.is_fail = true
+			location.type.is_fail = true
 		end
-		location.is_empty = (read1(f) == 1)
+		location.type.is_empty = (read1(f) == 1)
 	--	print(locid, start, succ, fail, dead, empty)
 		location.actions = {}
 		for p=1, parameter_count do
 			local par = {}
 			skip(f, 12)
 			par.idx = p
+			par.luaIdx = par.idx
+			par.param = quest.parameters[par.luaIdx]
 			par.delta=read4(f)
-			par.show_ = read1(f)
+			par.show_ = {value = read1(f)}
 			skip(f, 4)
 			par.percent_present = (read1(f) == 1)
 			par.delta_present = (read1(f) == 1)
@@ -520,7 +529,7 @@ function convert(fname, out)
 			par.expr = readu16(f)
 			skip(f, 14)
 			par.threshold_message = readu16(f)
-			if (par.show_ ~=0 or par.delta ~= 0 or par.delta_present or ( par.expr_present and par.expr )) and quest.parameters[p].is_active then
+			if (par.show_.value ~=0 or par.delta ~= 0 or par.delta_present or ( par.expr_present and par.expr )) and quest.parameters[p].is_active then
 				table.insert(location.actions, par)
 			end
 	--		print(add, show, percent, equal, expr, eval)
@@ -529,12 +538,12 @@ function convert(fname, out)
 		location.descriptions = {}
 		for di = 1, 10 do
 			skip(f, 4)
-			local d = readu16(f)
+			local d = {msg = readu16(f)}
 			if d then
 				table.insert(location.descriptions, d)
 			end
 		end
-		location.text_selection_method = (read1(f) == 1)
+		location.text_selection_method = { value = read1(f) }
 		read4(f)
 		read4(f)
 		local name = readu16(f)
@@ -548,7 +557,7 @@ function convert(fname, out)
 	for i=1, transition_count do
 		local path = {}
 		path.priority = readd(f)
-		path.passes_days = (read4(f) == 1)
+		path.passes_days = read4(f)
 		path.id = read4(f)
 		local source_id = read4(f)
 		path.destination_id = read4(f)
@@ -562,14 +571,15 @@ function convert(fname, out)
 			local par = {}
 			local m = read4(f)
 			par.idx = kk;
-			par.range_start = read4(f)
-			par.range_stop = read4(f)
+			par.luaIdx = par.idx;
+			par.param = quest.parameters[par.luaIdx]
+			par.range = {start = read4(f), stop = read4(f)}
 			local rangeit = false
-			if par.range_start > quest.parameters[kk].range_start or par.range_stop < quest.parameters[kk].range_stop then
+			if par.range.start > quest.parameters[kk].range.start or par.range.stop < quest.parameters[kk].range.stop then
 				rangeit = true
 			end
 			par.delta = read4(f)
-			par.show_ = read4(f)
+			par.show_ = { value = read4(f) }
 			read1(f)
 			par.percent_present = (read1(f) == 1)
 			par.delta_present = (read1(f) == 1)
@@ -578,24 +588,26 @@ function convert(fname, out)
 			par.expr = readu16(f)
 			
 			local n = read4(f)
-			par.includes_accept = (read1(f) == 1)
-			par.includes_values = {}
+			includes_accept = (read1(f) == 1)
+			includes_values = {}
 			for nn=1,n do
-				table.insert(par.includes_values, read4(f))
+				table.insert(includes_values, read4(f))
 			end
+			par.includes = {accept = includes_accept, values = includes_values}
 			n = read4(f)
-			par.mods_type = (read1(f) == 1)
-			par.mods_values = {}
+			mods_type = (read1(f) == 1)
+			mods_values = {}
 			for nn=1,n do
-				table.insert(par.mods_values, read4(f))
+				table.insert(mods_values, read4(f))
 			end
+			par.mods = {type = mods_type, values = mods_values}
 			read4(f)
 			local threshold_message = readu16(f)
 			if threshold_message and (threshold_message ~= quest.parameters[kk].dsc) then
 				par.threshold_message = threshold_message
 			end
-			if (par.show_ ~= 0 or par.delta ~= 0 or par.percent_present or par.delta_present or (par.expr_present and par.expr) or #par.includes_values > 0 or 
-				#par.mods_values > 0 or rangeit) and quest.parameters[kk].is_active then
+			if (par.show_.value ~= 0 or par.delta ~= 0 or par.percent_present or par.delta_present or (par.expr_present and par.expr) or #par.includes.values > 0 or 
+				#par.mods.values > 0 or rangeit) and quest.parameters[kk].is_active then
 				table.insert(path.actions, par);
 			end
 		end
