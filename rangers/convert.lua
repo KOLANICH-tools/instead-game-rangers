@@ -1,4 +1,7 @@
 --#!/usr/bin/lua
+
+deterministicTimestamp = 1359108621
+
 function u16toutf8(unicode_string, len)
 	local result = ''
 	local w,x,y,z = 0,0,0,0
@@ -126,7 +129,7 @@ function dump(fname)
 	print ([[Money="]]..tostring(math.random(20)*250)..[["]])
 	print ([[Day="]]..tostring(math.random(7) + 5)..[["]])
 	local tm
-	tm = os.time()
+	tm = deterministicTimestamp
 	local tt = os.date("*t", tm)
 	tt.year = 2011
 	tm = os.time(tt)
@@ -377,7 +380,7 @@ function read4(f)
 end
 
 function convert(fname, out)
-	math.randomseed(os.time())
+	math.randomseed(deterministicTimestamp)
 	math.random(1); math.random(2); math.random(3); -- Lua bug?
 
 	local f = io.open(fname, "rb");
