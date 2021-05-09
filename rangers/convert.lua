@@ -381,19 +381,22 @@ function convert(fname, out)
 			location.type.is_fail = true
 		end
 	--	print(locid, start, succ, fail, dead, empty)
+		local needed_actions = {}
 		for p, par in pairs(location.actions) do
 			par.luaIdx = par.idx + 1
 			if (par.show_.value ~=0 or par.delta ~= 0 or par.delta_present or ( par.expr_present and par.expr )) and quest.parameters[p].is_active then
-				--table.insert(location.actions, par)
+				table.insert(needed_actions, par)
 			end
 	--		print(add, show, percent, equal, expr, eval)
 		end
+		location.actions = needed_actions
 		location.pathes = {}
 		locations_by_id[location.id] = location
 	end
 	quest.locations = locations_by_id
 	for i, path in pairs(quest.transitions) do
 		local kk
+		local needed_actions = {}
 		for kk, par in pairs(path.actions) do
 			par.luaIdx = par.idx + 1
 			local rangeit = false
@@ -405,9 +408,10 @@ function convert(fname, out)
 			end
 			if (par.show_.value ~= 0 or par.delta ~= 0 or par.percent_present or par.delta_present or (par.expr_present and par.expr) or #par.includes.values > 0 or 
 				#par.mods.values > 0 or rangeit) and quest.parameters[kk].is_active then
-				--table.insert(path.actions, par);
+				table.insert(needed_actions, par);
 			end
 		end
+		path.actions = needed_actions
 		table.insert(quest.locations[path.source_id].pathes, path);
 	end
 	if out then
