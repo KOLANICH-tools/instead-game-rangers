@@ -97,7 +97,6 @@ function dump(fname)
 	end
 
 	print "require 'rangers'"
-	local xx = math.random(#systems)
 	if quest.race == 1 then
 		print [[Ranger="Урк Ужасный"]]
 		print [[Player="малок"]]
@@ -124,17 +123,17 @@ function dump(fname)
 		print [[FromPlanet="Земля"]]
 		print [[FromStar="Солнце"]]
 	end
-	print ([[ToStar="]]..systems[xx][1]..[["]])
-	print ([[ToPlanet="]]..systems[xx][2]..[["]])
-	print ([[Money="]]..tostring(math.random(20)*250)..[["]])
-	print ([[Day="]]..tostring(math.random(7) + 5)..[["]])
+	print ([[ToStar="]]..quest.to_star..[["]])
+	print ([[ToPlanet="]]..quest.to_planet..[["]])
+	print ([[Money="]]..tostring(quest.money)..[["]])
+	print ([[Day="]]..tostring(quest.day)..[["]])
 	local tm
 	tm = deterministicTimestamp
 	local tt = os.date("*t", tm)
 	tt.year = 2011
 	tm = os.time(tt)
-	print ("global { CurTime = "..tostring(tm).." };");
-	print ([[Date="]]..os.date ("%d-%m-%Y", tm):gsub("2011", "3011")..[["]])
+	print ("global { CurTime = "..tostring(quest.cur_time).." };");
+	print ([[Date="]]..quest.date..[["]])
 	if quest.dsc then
 		print ("main.desc="..string.format("%q", quest.dsc))
 	end
@@ -450,6 +449,7 @@ function convert(fname, out)
 		end
 		table.insert(quest.parameters, par)
 	end
+
 	read4(f)
 	readu16(f)
 	skip(f, 4)
@@ -468,7 +468,21 @@ function convert(fname, out)
 	readu16(f)
 	skip(f, 4);
 	readu16(f)
+
+	local xx = math.random(#systems)
+	quest.to_star = systems[xx][1]
+	quest.to_planet = systems[xx][2]
+	quest.money = math.random(20)*250
+	quest.day = math.random(7) + 5
 	
+	local tm
+	tm = deterministicTimestamp
+	local tt = os.date("*t", tm)
+	tt.year = 2011
+	tm = os.time(tt)
+	quest.cur_time = tm
+	quest.date = os.date ("%d-%m-%Y", tm):gsub("2011", "3011")
+
 	local locnr = read4(f)
 	local pathnr = read4(f)
 	read4(f)
