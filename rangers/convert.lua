@@ -2,40 +2,6 @@
 
 deterministicTimestamp = 1359108621
 
-function u16toutf8(unicode_string, len)
-	local result = ''
-	local w,x,y,z = 0,0,0,0
-	local i
-	local function modulo(a, b)
-		return a - math.floor(a/b) * b
-	end
-	for i = 1, len do
-		v = string.byte(unicode_string, (i - 1) * 2 + 1) + 
-			string.byte(unicode_string, (i - 1) * 2 + 2) * 0x100; 
-
-		if v ~= 0 and v ~= nil then
-			if v <= 0x7F then -- same as ASCII
-				result = result .. string.char(v)
-			elseif v >= 0x80 and v <= 0x7FF then -- 2 bytes
-				y = math.floor(modulo(v, 0x000800) / 64)
-				z = modulo(v, 0x000040)
-				result = result .. string.char(0xC0 + y, 0x80 + z)
-			elseif (v >= 0x800 and v <= 0xD7FF) or (v >= 0xE000 and v <= 0xFFFF) then -- 3 bytes
-				x = math.floor(modulo(v, 0x010000) / 4096)
-				y = math.floor(modulo(v, 0x001000) / 64)
-				z = modulo(v, 0x000040)
-				result = result .. string.char(0xE0 + x, 0x80 + y, 0x80 + z)
-			elseif (v >= 0x10000 and v <= 0x10FFFF) then -- 4 bytes
-				w = math.floor(modulo(v, 0x200000) / 262144)
-				x = math.floor(modulo(v, 0x040000) / 4096)
-				y = math.floor(modulo(v, 0x001000) / 64)
-				z = modulo(v, 0x000040)
-				result = result .. string.char(0xF0 + w, 0x80 + x, 0x80 + y, 0x80 + z)
-			end
-		end
-	end
-	return result
-end
 
 function parse_start(s)
 	if not s then return '' end
@@ -359,120 +325,27 @@ function dump(fname)
 	if file then file:close() end
 end
 --cd = iconv.open("UTF-8", "UNICODELITTLE");
-function readu16(f)
-	local l = read4(f)
-	if l == 0 then return end
-	local data = f:read(l * 2)
---	return cd:iconv(data):
-	return u16toutf8(data, l):gsub("%^", "\\^"):gsub("\n","^"):gsub("\r",""):gsub("{([^}]+)}","$|%1|");
-end
-function read1(f)
-	local data = f:read(1)
-	return string.byte(data,1)
-end
 
-function read4(f)
-	local data = f:read(4)
-	local i = string.byte(data,1) + string.byte(data,2) * 0x100 + string.byte(data,3) * 0x10000 + string.byte(data,4) * 0x1000000
-	if i > 0x7fffffff then
-		return i - 0xffffffff - 1
-	end
-	return i
-end
+-- Now parser is implemented via a Kaitai Struct spec, it can be obtained here: https://github.com/KOLANICH/kaitai_struct_formats/blob/space_rangers/game/space_rangers_qm.ksy
+-- You would need a MIT-licensed (copyright 2017-2020 Kaitai Project) lua runtime, it can be obtained here: https://github.com/kaitai-io/kaitai_struct_lua_runtime
+-- The runtime may need a patch to support UTF-16. The one here already has one, the UTF16-to UTF-8 decoder was taken from this file.
+
+space_rangers_qm = require("space_rangers_qm")
+postprocess = require("space_rangers_qm_postprocess")
 
 function convert(fname, out)
 	math.randomseed(deterministicTimestamp)
 	math.random(1); math.random(2); math.random(3); -- Lua bug?
 
-	local f = io.open(fname, "rb");
-	if not f then
+	function tryParse()
+		quest = space_rangers_qm:from_file(fname)
+	end
+	if not pcall(tryParse) then
 		error "can't open file"
 	end
-	local signature = read4(f)
-	if signature == 0x423a35d4 then -- from Erendir
-		parameter_count = 96
-	elseif signature == 0x423a35d3 then
-		parameter_count = 48
-	elseif signature == 0x423a35d2 then
-		parameter_count = 24
-	else
-		error "wrong signature"
-	end
-	read4(f);
-	quest.giver_race = read1(f, 1);
-	skip(f, 57 - 4 - 8 - 4 - 1);
-	quest.transition_limit = read4(f)
-	quest.difficulty = read4(f)
-	for p = 1, parameter_count do
-		local par = {}
-		par.range = {
-			start = read4(f),
-			stop = read4(f)
-		}
-		local mid = read4(f)
-		par.type = {value = read1(f)}
-		if par.type.value == 1 then 
-			par.fail = true
-		elseif par.type.value == 2 then
-			par.success = true
-		elseif par.type.value == 3 then
-			par.death = true
-		end
-		read4(f)
-		par.show_at_zero = (read1(f) == 1)
 
-		cb = {value = read1(f)}
-		if (cb.value == 1) then
-			cb.label = "min" 
-		else
-			cb.label = "max" 
-		end
-		par.critical_boundary = cb
-		par.critical_boundary = par.critical_boundary.label
-		par.is_active = (read1(f) == 1)
-		local ranges = read1(f)
-		skip(f, 3)
-		local money = read1(f)
-		read4(f)
-		par.name = readu16(f)
-		par.grades = {}
-		for n=1, ranges do
-			local range = {
-				start = read4(f),
-				stop = read4(f)
-			};
-			read4(f)
-			local label = readu16(f)
-			table.insert(par.grades, {range = range, label = label })
-		end
-		read4(f)
-		par.critical_message = readu16(f)
-		read4(f)
-		par.start_value = readu16(f)
-		if par.is_active then
-			par.start_value = parse_start(par.start_value)
-		end
-		table.insert(quest.parameters, par)
-	end
-
-	read4(f)
-	quest.to_star = readu16(f)
-	skip(f, 4)
-	quest.parsec = readu16(f)
-	skip(f, 4)
-	quest.artefact = readu16(f)
-	skip(f, 4)
-	quest.to_planet= readu16(f)
-	skip(f, 4)
-	quest.date = readu16(f)
-	skip(f, 4);
-	quest.money = readu16(f)
-	skip(f, 4);
-	quest.from_planet = readu16(f)
-	skip(f, 4);
-	quest.from_star = readu16(f)
-	skip(f, 4);
-	quest.ranger = readu16(f)
+	locations_by_id = {}
+	postprocess(quest)
 
 	local xx = math.random(#systems)
 	quest.to_star = systems[xx][1]
@@ -488,138 +361,55 @@ function convert(fname, out)
 	quest.cur_time = tm
 	quest.date = os.date ("%d-%m-%Y", tm):gsub("2011", "3011")
 
-	local loc_count = read4(f)
-	local transition_count = read4(f)
-	read4(f)
-	quest.congrat_message = readu16(f)
-	read4(f)
-	quest.description = readu16(f)
-	skip(f, 8)
-	for i=1, loc_count do
-		local location = {}
-		location.passes_days = read4(f)
-		read4(f)
-		read4(f)
-		location.id = read4(f)
-		location.type = {
-			is_initial = (read1(f) == 1),
-			is_success = (read1(f) == 1),
-			is_fail = (read1(f) == 1)
-		}
-		local is_death = (read1(f) == 1)
-		if location.is_death then
+	for i, par in pairs(quest.parameters) do
+		if par.type.value == 1 then 
+			par.fail = true
+		elseif par.type.value == 2 then
+			par.success = true
+		elseif par.type.value == 3 then
+			par.death = true
+		end
+
+		par.critical_boundary = par.critical_boundary.label
+		if par.is_active then
+			par.start_value = parse_start(par.start_value)
+		end
+	end
+
+	for i, location in pairs(quest.locations) do
+		if location.type.is_death then
 			location.type.is_fail = true
 		end
-		location.type.is_empty = (read1(f) == 1)
 	--	print(locid, start, succ, fail, dead, empty)
-		location.actions = {}
-		for p=1, parameter_count do
-			local par = {}
-			skip(f, 12)
-			par.idx = p
-			par.luaIdx = par.idx
-			par.param = quest.parameters[par.luaIdx]
-			par.delta=read4(f)
-			par.show_ = {value = read1(f)}
-			skip(f, 4)
-			par.percent_present = (read1(f) == 1)
-			par.delta_present = (read1(f) == 1)
-			par.expr_present = (read1(f) == 1)
-			read4(f)
-			par.expr = readu16(f)
-			skip(f, 14)
-			par.threshold_message = readu16(f)
+		for p, par in pairs(location.actions) do
+			par.luaIdx = par.idx + 1
 			if (par.show_.value ~=0 or par.delta ~= 0 or par.delta_present or ( par.expr_present and par.expr )) and quest.parameters[p].is_active then
-				table.insert(location.actions, par)
+				--table.insert(location.actions, par)
 			end
 	--		print(add, show, percent, equal, expr, eval)
 		end
-	--	skip(f, 3)
-		location.descriptions = {}
-		for di = 1, 10 do
-			skip(f, 4)
-			local d = {msg = readu16(f)}
-			if d then
-				table.insert(location.descriptions, d)
-			end
-		end
-		location.text_selection_method = { value = read1(f) }
-		read4(f)
-		read4(f)
-		local name = readu16(f)
-		read4(f)
-		readu16(f)
-		read4(f)
-		location.text_selection_formula = readu16(f)
 		location.pathes = {}
-		quest.locations[location.id] = location
+		locations_by_id[location.id] = location
 	end
-	for i=1, transition_count do
-		local path = {}
-		path.priority = readd(f)
-		path.passes_days = read4(f)
-		path.id = read4(f)
-		local source_id = read4(f)
-		path.destination_id = read4(f)
-		read1(f)
-		path.always_show = (read1(f) == 1)
-		path.limit = read4(f)
-		path.show_order = read4(f)
+	quest.locations = locations_by_id
+	for i, path in pairs(quest.transitions) do
 		local kk
-		path.actions = {}
-		for kk = 1, parameter_count do
-			local par = {}
-			local m = read4(f)
-			par.idx = kk;
-			par.luaIdx = par.idx;
-			par.param = quest.parameters[par.luaIdx]
-			par.range = {start = read4(f), stop = read4(f)}
+		for kk, par in pairs(path.actions) do
+			par.luaIdx = par.idx + 1
 			local rangeit = false
 			if par.range.start > quest.parameters[kk].range.start or par.range.stop < quest.parameters[kk].range.stop then
 				rangeit = true
 			end
-			par.delta = read4(f)
-			par.show_ = { value = read4(f) }
-			read1(f)
-			par.percent_present = (read1(f) == 1)
-			par.delta_present = (read1(f) == 1)
-			par.expr_present = (read1(f) == 1)
-			read4(f)
-			par.expr = readu16(f)
-			
-			local n = read4(f)
-			includes_accept = (read1(f) == 1)
-			includes_values = {}
-			for nn=1,n do
-				table.insert(includes_values, read4(f))
-			end
-			par.includes = {accept = includes_accept, values = includes_values}
-			n = read4(f)
-			mods_type = (read1(f) == 1)
-			mods_values = {}
-			for nn=1,n do
-				table.insert(mods_values, read4(f))
-			end
-			par.mods = {type = mods_type, values = mods_values}
-			read4(f)
-			local threshold_message = readu16(f)
-			if threshold_message and (threshold_message ~= quest.parameters[kk].dsc) then
-				par.threshold_message = threshold_message
+			if threshold_message and (threshold_message ~= quest.parameters[kk].critical_message) then
+				par.threshold_message = par.threshold_message
 			end
 			if (par.show_.value ~= 0 or par.delta ~= 0 or par.percent_present or par.delta_present or (par.expr_present and par.expr) or #par.includes.values > 0 or 
 				#par.mods.values > 0 or rangeit) and quest.parameters[kk].is_active then
-				table.insert(path.actions, par);
+				--table.insert(path.actions, par);
 			end
 		end
-		read4(f)
-		path.condition_expr = readu16(f)
-		read4(f)
-		path.title = readu16(f)
-		read4(f)
-		path.description = readu16(f)
-		table.insert(quest.locations[source_id].pathes, path);
+		table.insert(quest.locations[path.source_id].pathes, path);
 	end
-	f:close()
 	if out then
 		dump(out)
 	else
